@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Firma Arama ve Pinleme</title>
+    <style>
+        #map {
+            height: 500px;
+            width: 100%;
+        }
+        .controls {
+            margin-top: 10px;
+            padding: 10px;
+            background: #f1f1f1;
+            border: 1px solid #ccc;
+        }
+        .controls input, .controls button {
+            margin: 5px;
+            padding: 5px;
+        }
+        /* Giriş ekranı stilleri */
+        #loginScreen {
+            width: 100%;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: #f9f9f9;
+            position: fixed;
+            top: 0;
+            left: 0;
+        }
+        #loginScreen input, #loginScreen button {
+            margin: 10px;
+            padding: 10px;
+            font-size: 16px;
+        }
+        #appContent {
+            display: none; /* Başlangıçta gizli */
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Giriş Ekranı -->
+    <div id="loginScreen">
+        <h2>Giriş Yap</h2>
+        <input type="text" id="username" placeholder="Kullanıcı Adı">
+        <input type="password" id="password" placeholder="Şifre">
+        <button onclick="checkLogin()">Giriş Yap</button>
+        <p id="loginMessage" style="color: red;"></p>
+    </div>
+
+    <!-- Asıl İçerik -->
+    <div id="appContent">
+        <h1>Firma Arama ve Pinleme</h1>
+        <div class="controls">
+            <label for="searchKeyword">Firma Ara:</label>
+            <input type="text" id="searchKeyword" placeholder="Firma adı girin...">
+            <button onclick="searchFirms()">Ara</button>
+
+            <label for="pinCount">Pin Sayısı:</label>
+            <input type="number" id="pinCount" placeholder="Pin sayısı girin..." min="1">
+
+            <label for="radius">KM Yarıçapı:</label>
+            <input type="number" id="radius" placeholder="KM yarıçapı girin..." min="1">
+
+            <label for="tags">Etiket Kelimeleri (virgülle ayırın):</label>
+            <input type="text" id="tags" placeholder="Örnek: etiket1, etiket2, etiket3">
+
+            <button onclick="addPinsAutomatically()">Pinleme Ekle</button>
+            <button onclick="exportToKML()">KML Olarak Dışa Aktar</button>
+        </div>
+        <div id="map"></div>
+    </div>
+
+    <script>
+        function checkLogin() {
+            var username = document.getElementById("username").value;
+            var password = document.getElementById("password").value;
+
+            if (username === "sebattinbey" && password === "34kl0828") {
+                document.getElementById("loginScreen").style.display = "none"; // Giriş ekranını gizle
+                document.getElementById("appContent").style.display = "block"; // Asıl içeriği göster
+            } else {
+                document.getElementById("loginMessage").innerText = "Hatalı kullanıcı adı veya şifre!";
+            }
+        }
+
+        var map;
+        var markers = [];
+        var firms = []; // Firma bilgilerini saklamak için
+
+        function initMap() {
+            var center = { lat: 41.0082, lng: 28.9784 }; // İstanbul'un koordinatları
+
+            map = new google.maps.Map(document.getElementById('map'), {
+                zoom: 12,
+                center: center
+            });
+        }
+
+        function searchFirms() {
+            var keyword = document.getElementById('searchKeyword').value.toLowerCase();
+            markers.forEach(marker => marker.setMap(null)); // Tüm pinleri gizle
+
+            firms.forEach((firm, index) => {
+                if (firm.name.toLowerCase().includes(keyword)) {
+                    markers[index].setMap(map); // Eşleşen pinleri göster
+                }
+            });
+        }
+
+        function addPinsAutomatically() {
+            var pinCount = parseInt(document.getElementById('pinCount').value);
+            var radius = parseFloat(document.getElementById('radius').value) * 1000;
+            var tags = document.getElementById('tags').value.split(',').map(tag => tag.trim());
+
+            if (!pinCount || !radius || tags.length === 0) {
+                alert("Lütfen pin sayısı, KM yarıçapı ve etiket kelimeleri girin!");
+                return;
+            }
+
+            markers.forEach(marker => marker.setMap(null));
+            markers = [];
+            firms = [];
+
+            var center = map.getCenter();
+
+            for (var i = 0; i < pinCount; i++) {
+                var randomLocation = getRandomLocationInCircle(center, radius);
+                var firmName = "Firma " + (i + 1);
+                addFirm(firmName, randomLocation.lat, randomLocation.lng, tags);
+            }
+        }
+
+        function getRandomLocationInCircle(center, radius) {
+            var x0 = center.lng();
+            var y0 = center.lat();
+            var angle = Math.random() * 2 * Math.PI;
+            var r = radius * Math.sqrt(Math.random());
+            var lat = y0 + (r / 111320) * Math.cos(angle);
+            var lng = x0 + (r / (111320 * Math.cos(y0 * Math.PI / 180))) * Math.sin(angle);
+            return { lat: lat, lng: lng };
+        }
+
+        function addFirm(name, lat, lng, tags) {
+            var contentString = `<div><strong>${name}</strong><br><em>Etiketler:</em> ${tags.join(', ')}</div>`;
+
+            var infowindow = new google.maps.InfoWindow({
+                content: contentString
+            });
+
+            var marker = new google.maps.Marker({
+                position: { lat: lat, lng: lng },
+                map: map,
+                title: name
+            });
+
+            marker.addListener('click', function() {
+                infowindow.open(map, marker);
+            });
+
+            markers.push(marker);
+            firms.push({ name: name, lat: lat, lng: lng, tags: tags });
+        }
+
+        function exportToKML() {
+            var kmlContent = '<?xml version="1.0" encoding="UTF-8"?>\n';
+            kmlContent += '<kml xmlns="http://www.opengis.net/kml/2.2">\n<Document>\n';
+
+            firms.forEach(firm => {
+                kmlContent += `<Placemark>\n<name>${firm.name}</name>\n<description>Etiketler: ${firm.tags.join(', ')}</description>\n<Point>\n<coordinates>${firm.lng},${firm.lat},0</coordinates>\n</Point>\n</Placemark>\n`;
+            });
+
+            kmlContent += '</Document>\n</kml>';
+
+            var blob = new Blob([kmlContent], { type: 'application/vnd.google-earth.kml+xml' });
+            var link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = 'firmalar.kml';
+            link.click();
+        }
+    </script>
+
+    <script async defer src="https://maps.googleapis.com/maps/api/js?key=API_KEY_YERINE_KENDI_KEYINIZI_YAZIN&callback=initMap"></script>
+
+</body>
+</html>
